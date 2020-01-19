@@ -56,37 +56,6 @@ def main():
     testset_idx = np.random.choice(nonnull_data.index, int(0.30*nonnull_data.shape[0]))
     testset_df = nonnull_data.loc[testset_idx].copy()
     loan_df = loan_df[~loan_df.index.isin(testset_idx)]
-
-    '''annual_income_lkup1 = loan_df.groupby(['state','zip_code','employer_or_jobtitle'])['annual_income'].median().dropna().to_dict()
-    annual_income_lkup2 = loan_df.groupby(['state','employer_or_jobtitle'])['annual_income'].median().dropna().to_dict()
-    annual_income_lkup3 = loan_df.groupby(['state','zip_code'])['annual_income'].median().dropna().to_dict()
-    annual_income_lkup4 = loan_df.groupby(['state'])['annual_income'].median().to_dict()
-    
-    def fill_annual_income(state, zip_code, employment):
-        if (state, zip_code, employment) in annual_income_lkup1:
-            return annual_income_lkup1[(state, zip_code, employment)]
-        elif (state, employment) in annual_income_lkup2:
-            return annual_income_lkup2[(state, employment)]
-        elif (state, zip_code) in annual_income_lkup3:
-            return annual_income_lkup3[(state, zip_code)]
-        else:
-            return annual_income_lkup4[state]
-    
-    loan_df.annual_income = loan_df.apply(lambda row: fill_annual_income(row['state'],row['zip_code'],row['employer_or_jobtitle']) if pd.isnull(row['annual_income']) else row['annual_income'], axis=1)
-
-    knn_clf = KNeighborsClassifier(n_neighbors=5)
-    
-    knn_features = ['interest_rate']
-    
-    knn_df = loan_df[loan_df.loan_subgrade.notnull()][knn_features]
-    
-    Y_knn = loan_df[loan_df.loan_subgrade.notnull()]['loan_subgrade']
-    
-    knn_clf.fit(knn_df,Y_knn)
-    
-    null_grades = loan_df[loan_df.loan_subgrade.isnull()][['interest_rate','loan_subgrade']].copy()
-    null_grades['loan_subgrade'] = knn_clf.predict(null_grades.interest_rate.values.reshape(-1,1))
-    loan_df.update(null_grades)'''
     
     features = ['amount_requested','number_of_payments','annual_income','loan_subgrade',
             'issue_year','issue_month','credit_age', 'debt_to_income_ratio','line_utilization_rate','had_deliquency',
@@ -103,11 +72,6 @@ def main():
 
     X_test = testset_df[features]
     y_test = testset_df['interest_rate']
-
-    #features_df = loan_df[features]
-    #Y = loan_df['interest_rate']
-
-    #X_train, X_test, y_train, y_test = train_test_split(features_df, Y, test_size=0.3, random_state=50)
     
     automl = autosklearn.regression.AutoSklearnRegressor(
     time_left_for_this_task=3600,
@@ -121,6 +85,68 @@ def main():
     print(automl.show_models())
     predictions = automl.predict(X_test)
     print("RMSE:", mean_squared_error(y_test,predictions)**0.5)
+
+    '''
+    OUTPUT:
+    
+    [(0.720000,
+      SimpleRegressionPipeline({'categorical_encoding:__choice':'one_hot_encoding',
+                                'imputation:strategy':'mean',
+                                'preprocessor:__choice__':'no_preprocessing',
+                                'regressor:__choice__':'random_forest',
+                                'rescaling:__choice__':'standardize',
+                                'categorical_encoding:one_hot_encoding:use_minimum_fraction': 'True',
+                                'regressor:random_forest:bootstrap':'True',
+                                'regressor:random_forest:criterion':'mse',
+                                'regressor:random_forest:max_depth':'None',
+                                'regressor:random_forest:max_features':1.0,
+                                'regressor:random_forest:max_leaf_nodes':'None',
+                                'regressor:random_forest:min_impurity_decrease':0.0,
+                                'regressor:random_forest:min_samples_leaf':1,
+                                'regressor:random_forest:min_samples_split':2,
+                                'regressor:random_forest:min_weight_fraction_leaf':0.0,
+                                'regressor:random_forest:n_estimators':100,
+                                'categorical_encoding:one_hot_encoding:minimum_fraction':0.01}
+      dataset_properties={
+        'task':4,
+        'sparse':False,
+        'multilabel':False,
+        'multiclass':False,
+        'target_type':'regression',
+        'signed':False})),
+     (0.280000,
+      SimpleRegressionPipeline({'categorical_encoding:__choice':'one_hot_encoding',
+                                'imputation:strategy':'median',
+                                'preprocessor:__choice__':'polynomial',
+                                'regressor:__choice__':'gradient_boosting',
+                                'rescaling:__choice__':'robust_scaler',
+                                'preprocessor:polynomial:degree':3,
+                                'preprocessor:polynomial:include_bias':'False',
+                                'preprocessor:polynomial:interaction_only':'True',
+                                'regressor:gradient_boosting:early_stop': 'valid',
+                                'regressor:gradient_boosting:l2_regularization':0.0017344914851347946,
+                                'regressor:gradient_boosting:learning_rate':0.3380352235102556,
+                                'regressor:gradient_boosting:loss': 'least_squares',
+                                'regressor:gradient_boosting:max_bins': 256,
+                                'regressor:gradient_boosting:max_depth': 'None',
+                                'regressor:gradient_boosting:max_leaf_nodes': 64,
+                                'regressor:gradient_boosting:min_samples_leaf':3,
+                                'regressor:gradient_boosting:scoring':'loss',
+                                'regressor:gradient_boosting:tol':  1e-07,
+                                'rescaling:robust_scaler:q_max': 0.849311043670883,
+                                'rescaling:robust_scaler:q_min': 0.065001913429137,
+                                'regressor:gradient_boosting:n_iter_no_change':9,
+                                'regressor:gradient_boosting:validation_fraction':0.15774326288476428},
+      dataset_properties={
+        'task':4,
+        'sparse':False,
+        'multilabel':False,
+        'multiclass':False,
+        'target_type':'regression',
+        'signed':False}))]
+     
+    RMSE: 0.23420240438526985'''
+
 
 if __name__ == '__main__':
     main()
