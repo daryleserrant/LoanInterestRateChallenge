@@ -1,10 +1,10 @@
-
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import mean_squared_error
 from datetime import datetime
+from sklearn.preprocessing import LabelEncoder
 import autosklearn.regression
 
 def main():
@@ -26,6 +26,8 @@ def main():
 
     # Convert amount requested, line utilization rate, and interest rate fields into numeric types
     loan_df.amount_requested = loan_df.amount_requested.apply(lambda x: float(x.replace('$','').replace(',','')))
+    loan_df.amount_funded = loan_df.amount_funded.apply(lambda x: float(x.replace('$','').replace(',','')))
+    loan_df.investor_funded_portion = loan_df.investor_funded_portion.apply(lambda x:float(x.replace('$','').replace(',','')))
     loan_df.line_utilization_rate = loan_df.line_utilization_rate.apply(lambda x: float(x.replace('%','')) if pd.notnull(x) else x)
     loan_df.interest_rate = loan_df.interest_rate.apply(lambda x: float(x.replace('%','')))
     
@@ -40,6 +42,15 @@ def main():
 
     subgrade_map = {g:n+1 for n,g in enumerate(sorted(loan_df[loan_df.loan_subgrade.notnull()].loan_subgrade.unique()))}
     loan_df.loan_subgrade = loan_df.loan_subgrade.apply(lambda x: subgrade_map[x] if x in subgrade_map else x)
+
+    le = LabelEncoder()
+    le.fit(loan_df.loan_category)
+
+    loan_df.loan_category = le.transform(loan_df.loan_category)
+
+    loan_df.home_ownership_status = loan_df.home_ownership_status.fillna('NONE')
+    le.fit(loan_df.home_ownership_status)
+    loan_df.home_ownership_status = le.transform(loan_df.home_ownership_status)
 
     # Clean deliquency values
     loan_df['had_deliquency'] = loan_df.months_since_last_delinquency.apply(lambda x: 1 if pd.notnull(x) else 0)
@@ -56,16 +67,17 @@ def main():
     testset_idx = np.random.choice(nonnull_data.index, int(0.30*nonnull_data.shape[0]))
     testset_df = nonnull_data.loc[testset_idx].copy()
     loan_df = loan_df[~loan_df.index.isin(testset_idx)]
-    
+
     features = ['amount_requested','number_of_payments','annual_income','loan_subgrade',
             'issue_year','issue_month','credit_age', 'debt_to_income_ratio','line_utilization_rate','had_deliquency',
             'months_since_last_delinquency','number_of_open_credit_lines','number_of_inquiries', 'total_revolving_credit',
-            'number_of_derogatory_public_records','listing_status']
+            'number_of_derogatory_public_records','listing_status','loan_category','amount_funded','investor_funded_portion',
+            'home_ownership_status','months_since_last_public_record','number_of_credit_lines']
     
     feature_types = ['numerical','categorical','numerical','numerical',
                      'numerical','numerical','numerical','numerical', 'numerical','numerical',
                      'numerical','numerical','numerical','numerical','numerical',
-                     'categorical']
+                     'categorical','categorical','numerical','numerical','categorical','numerical','numerical']
     
     X_train = loan_df[features]
     y_train = loan_df['interest_rate']
@@ -87,65 +99,54 @@ def main():
     print("RMSE:", mean_squared_error(y_test,predictions)**0.5)
 
     '''
-    OUTPUT:
-    
-    [(0.720000,
-      SimpleRegressionPipeline({'categorical_encoding:__choice':'one_hot_encoding',
-                                'imputation:strategy':'mean',
-                                'preprocessor:__choice__':'no_preprocessing',
-                                'regressor:__choice__':'random_forest',
-                                'rescaling:__choice__':'standardize',
-                                'categorical_encoding:one_hot_encoding:use_minimum_fraction': 'True',
-                                'regressor:random_forest:bootstrap':'True',
-                                'regressor:random_forest:criterion':'mse',
-                                'regressor:random_forest:max_depth':'None',
-                                'regressor:random_forest:max_features':1.0,
-                                'regressor:random_forest:max_leaf_nodes':'None',
-                                'regressor:random_forest:min_impurity_decrease':0.0,
-                                'regressor:random_forest:min_samples_leaf':1,
-                                'regressor:random_forest:min_samples_split':2,
-                                'regressor:random_forest:min_weight_fraction_leaf':0.0,
-                                'regressor:random_forest:n_estimators':100,
-                                'categorical_encoding:one_hot_encoding:minimum_fraction':0.01}
-      dataset_properties={
-        'task':4,
-        'sparse':False,
-        'multilabel':False,
-        'multiclass':False,
-        'target_type':'regression',
-        'signed':False})),
-     (0.280000,
-      SimpleRegressionPipeline({'categorical_encoding:__choice':'one_hot_encoding',
-                                'imputation:strategy':'median',
-                                'preprocessor:__choice__':'polynomial',
-                                'regressor:__choice__':'gradient_boosting',
-                                'rescaling:__choice__':'robust_scaler',
-                                'preprocessor:polynomial:degree':3,
-                                'preprocessor:polynomial:include_bias':'False',
-                                'preprocessor:polynomial:interaction_only':'True',
-                                'regressor:gradient_boosting:early_stop': 'valid',
-                                'regressor:gradient_boosting:l2_regularization':0.0017344914851347946,
-                                'regressor:gradient_boosting:learning_rate':0.3380352235102556,
-                                'regressor:gradient_boosting:loss': 'least_squares',
-                                'regressor:gradient_boosting:max_bins': 256,
-                                'regressor:gradient_boosting:max_depth': 'None',
-                                'regressor:gradient_boosting:max_leaf_nodes': 64,
-                                'regressor:gradient_boosting:min_samples_leaf':3,
-                                'regressor:gradient_boosting:scoring':'loss',
-                                'regressor:gradient_boosting:tol':  1e-07,
-                                'rescaling:robust_scaler:q_max': 0.849311043670883,
-                                'rescaling:robust_scaler:q_min': 0.065001913429137,
-                                'regressor:gradient_boosting:n_iter_no_change':9,
-                                'regressor:gradient_boosting:validation_fraction':0.15774326288476428},
-      dataset_properties={
-        'task':4,
-        'sparse':False,
-        'multilabel':False,
-        'multiclass':False,
-        'target_type':'regression',
-        'signed':False}))]
-     
-    RMSE: 0.23420240438526985'''
+    [(0.680000, SimpleRegressionPipeline({'categorical_encoding:__choice__': 'no_encoding',
+                                          'imputation:strategy': 'mean',
+                                          'preprocessor:__choice__': 'no_preprocessing',
+                                          'regressor:__choice__': 'random_forest',
+                                          'rescaling:__choice__': 'standardize',
+                                          'regressor:random_forest:bootstrap': 'True',
+                                          'regressor:random_forest:criterion': 'friedman_mse',
+                                          'regressor:random_forest:max_depth': 'None',
+                                          'regressor:random_forest:max_features': 0.6368504684090388,
+                                          'regressor:random_forest:max_leaf_nodes': 'None',
+                                          'regressor:random_forest:min_impurity_decrease': 0.0,
+                                          'regressor:random_forest:min_samples_leaf': 7,
+                                          'regressor:random_forest:min_samples_split': 18,
+                                          'regressor:random_forest:min_weight_fraction_leaf': 0.0,
+                                          'regressor:random_forest:n_estimators': 100},
+     dataset_properties={
+       'task': 4,
+       'sparse': False,
+       'multilabel': False,
+       'multiclass': False,
+       'target_type': 'regression',
+       'signed': False})),
+     (0.320000, SimpleRegressionPipeline({'categorical_encoding:__choice__': 'one_hot_encoding',
+                                          'imputation:strategy': 'mean',
+                                          'preprocessor:__choice__': 'no_preprocessing',
+                                          'regressor:__choice__': 'random_forest',
+                                          'rescaling:__choice__': 'standardize',
+                                          'categorical_encoding:one_hot_encoding:use_minimum_fraction': 'True',
+                                          'regressor:random_forest:bootstrap': 'True',
+                                          'regressor:random_forest:criterion': 'mse',
+                                          'regressor:random_forest:max_depth': 'None',
+                                          'regressor:random_forest:max_features': 1.0,
+                                          'regressor:random_forest:max_leaf_nodes': 'None',
+                                          'regressor:random_forest:min_impurity_decrease': 0.0,
+                                          'regressor:random_forest:min_samples_leaf': 1,
+                                          'regressor:random_forest:min_samples_split': 2,
+                                          'regressor:random_forest:min_weight_fraction_leaf': 0.0,
+                                          'regressor:random_forest:n_estimators': 100,
+                                          'categorical_encoding:one_hot_encoding:minimum_fraction': 0.01},
+     dataset_properties={
+       'task': 4,
+       'sparse': False,
+       'multilabel': False,
+       'multiclass': False,
+       'target_type': 'regression',
+       'signed': False})),]
+    RMSE: 0.19886744467028633
+    '''
 
 
 if __name__ == '__main__':
